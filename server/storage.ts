@@ -15,14 +15,13 @@ export interface IStorage {
   updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
   deleteTask(id: number): Promise<void>;
 
-  // Fix session store type
-  sessionStore: ReturnType<typeof createMemoryStore>;
+  sessionStore: session.Store;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private tasks: Map<number, Task>;
-  sessionStore: ReturnType<typeof createMemoryStore>;
+  sessionStore: session.Store;
   private currentUserId: number;
   private currentTaskId: number;
 
@@ -32,7 +31,7 @@ export class MemStorage implements IStorage {
     this.currentUserId = 1;
     this.currentTaskId = 1;
     this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
+      checkPeriod: 86400000, // prune expired entries every 24h
     });
   }
 
@@ -87,7 +86,6 @@ export class MemStorage implements IStorage {
     const updated: Task = {
       ...existing,
       ...task,
-      // Ensure null values for optional fields
       latitude: task.latitude || existing.latitude || null,
       longitude: task.longitude || existing.longitude || null,
       audioUrl: task.audioUrl || existing.audioUrl || null,
