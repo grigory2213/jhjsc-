@@ -8,8 +8,10 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getUsers(): Promise<User[]>;
 
-  getTasks(userId: number): Promise<Task[]>;
+  getTasks(userId?: number): Promise<Task[]>;
+  getTasksAssignedTo(userId: number): Promise<Task[]>;
   getTask(id: number): Promise<Task | undefined>;
   createTask(userId: number, task: Omit<InsertTask, "userId">): Promise<Task>;
   updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
@@ -45,16 +47,30 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentUserId++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id,
+      // Make the first user an admin
+      isAdmin: insertUser.isAdmin || this.users.size === 0 
+    };
     this.users.set(id, user);
     return user;
   }
 
-  async getTasks(userId: number): Promise<Task[]> {
+  async getTasks(userId?: number): Promise<Task[]> {
+    const tasks = Array.from(this.tasks.values());
+    return userId ? tasks.filter(task => task.userId === userId) : tasks;
+  }
+
+  async getTasksAssignedTo(userId: number): Promise<Task[]> {
     return Array.from(this.tasks.values()).filter(
-      (task) => task.userId === userId,
+      (task) => task.assignedToId === userId,
     );
   }
 
@@ -71,6 +87,7 @@ export class MemStorage implements IStorage {
       ...task,
       id,
       userId,
+      assignedToId: task.assignedToId,
       latitude: task.latitude || null,
       longitude: task.longitude || null,
       audioUrl: task.audioUrl || null,
@@ -89,6 +106,7 @@ export class MemStorage implements IStorage {
       latitude: task.latitude || existing.latitude || null,
       longitude: task.longitude || existing.longitude || null,
       audioUrl: task.audioUrl || existing.audioUrl || null,
+      assignedToId: task.assignedToId || existing.assignedToId,
     };
     this.tasks.set(id, updated);
     return updated;

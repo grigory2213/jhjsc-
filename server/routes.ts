@@ -25,7 +25,10 @@ export function registerRoutes(app: Express): Server {
   // Task routes
   app.get("/api/tasks", async (req, res) => {
     if (!req.user) return res.sendStatus(401);
-    const tasks = await storage.getTasks(req.user.id);
+    // If admin, get all tasks; if regular user, get only assigned tasks
+    const tasks = req.user.isAdmin 
+      ? await storage.getTasks()
+      : await storage.getTasksAssignedTo(req.user.id);
     res.json(tasks);
   });
 
@@ -33,12 +36,16 @@ export function registerRoutes(app: Express): Server {
     if (!req.user) return res.sendStatus(401);
     const task = await storage.getTask(parseInt(req.params.id));
     if (!task) return res.sendStatus(404);
-    if (task.userId !== req.user.id) return res.sendStatus(403);
+    // Allow access if user is admin or the task is assigned to them
+    if (!req.user.isAdmin && task.assignedToId !== req.user.id) {
+      return res.sendStatus(403);
+    }
     res.json(task);
   });
 
   app.post("/api/tasks", async (req, res) => {
     if (!req.user) return res.sendStatus(401);
+    if (!req.user.isAdmin) return res.sendStatus(403);
     const task = await storage.createTask(req.user.id, req.body);
     res.status(201).json(task);
   });
@@ -47,8 +54,15 @@ export function registerRoutes(app: Express): Server {
     if (!req.user) return res.sendStatus(401);
     const task = await storage.getTask(parseInt(req.params.id));
     if (!task) return res.sendStatus(404);
-    if (task.userId !== req.user.id) return res.sendStatus(403);
-    
+    if (!req.user.isAdmin && task.assignedToId !== req.user.id) {
+      return res.sendStatus(403);
+    }
+
+    // Only admins can reassign tasks
+    if (req.body.assignedToId && !req.user.isAdmin) {
+      return res.sendStatus(403);
+    }
+
     const updated = await storage.updateTask(task.id, req.body);
     res.json(updated);
   });
@@ -59,25 +73,35 @@ export function registerRoutes(app: Express): Server {
 
     const task = await storage.getTask(parseInt(req.params.id));
     if (!task) return res.sendStatus(404);
-    if (task.userId !== req.user.id) return res.sendStatus(403);
+    if (!req.user.isAdmin && task.assignedToId !== req.user.id) {
+      return res.sendStatus(403);
+    }
 
     // In a real app, we'd upload to S3/etc and store the URL
     // For demo, we'll store the data URL
     const audioData = req.file.buffer.toString('base64');
     const audioUrl = `data:audio/mpeg;base64,${audioData}`;
-    
+
     const updated = await storage.updateTask(task.id, { audioUrl });
     res.json(updated);
   });
 
   app.delete("/api/tasks/:id", async (req, res) => {
     if (!req.user) return res.sendStatus(401);
+    if (!req.user.isAdmin) return res.sendStatus(403);
     const task = await storage.getTask(parseInt(req.params.id));
     if (!task) return res.sendStatus(404);
-    if (task.userId !== req.user.id) return res.sendStatus(403);
-    
+
     await storage.deleteTask(task.id);
     res.sendStatus(204);
+  });
+
+  // Add endpoint to get all users (for admin task assignment)
+  app.get("/api/users", async (req, res) => {
+    if (!req.user) return res.sendStatus(401);
+    if (!req.user.isAdmin) return res.sendStatus(403);
+    const users = await storage.getUsers();
+    res.json(users);
   });
 
   const httpServer = createServer(app);

@@ -6,11 +6,13 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  isAdmin: boolean("is_admin").notNull().default(false),
 });
 
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull(), 
+  assignedToId: integer("assigned_to_id").notNull(), 
   title: text("title").notNull(),
   description: text("description").notNull(),
   latitude: text("latitude"),
@@ -21,11 +23,13 @@ export const tasks = pgTable("tasks", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  isAdmin: true,
 });
 
 export const insertTaskSchema = createInsertSchema(tasks).pick({
   title: true,
   description: true,
+  assignedToId: true,
   latitude: true,
   longitude: true,
   audioUrl: true,
