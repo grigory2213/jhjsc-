@@ -12,8 +12,16 @@ import { ProtectedRoute } from "./lib/protected-route";
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={HomePage} />
-      <ProtectedRoute path="/tasks/:id" component={TaskDetails} />
+      <Route path="/" component={() => <ProtectedRoute path="/" component={HomePage} />} />
+      <Route 
+        path="/tasks/:id" 
+        component={({ params }) => (
+          <ProtectedRoute 
+            path={`/tasks/${params.id}`} 
+            component={() => <TaskDetails params={params} />} 
+          />
+        )} 
+      />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

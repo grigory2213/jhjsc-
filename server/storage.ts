@@ -8,20 +8,21 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  
+
   getTasks(userId: number): Promise<Task[]>;
   getTask(id: number): Promise<Task | undefined>;
   createTask(userId: number, task: Omit<InsertTask, "userId">): Promise<Task>;
   updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
   deleteTask(id: number): Promise<void>;
 
-  sessionStore: session.SessionStore;
+  // Fix session store type
+  sessionStore: ReturnType<typeof createMemoryStore>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private tasks: Map<number, Task>;
-  sessionStore: session.SessionStore;
+  sessionStore: ReturnType<typeof createMemoryStore>;
   private currentUserId: number;
   private currentTaskId: number;
 
@@ -67,7 +68,14 @@ export class MemStorage implements IStorage {
     task: Omit<InsertTask, "userId">,
   ): Promise<Task> {
     const id = this.currentTaskId++;
-    const newTask: Task = { ...task, id, userId };
+    const newTask: Task = {
+      ...task,
+      id,
+      userId,
+      latitude: task.latitude || null,
+      longitude: task.longitude || null,
+      audioUrl: task.audioUrl || null,
+    };
     this.tasks.set(id, newTask);
     return newTask;
   }
@@ -75,10 +83,14 @@ export class MemStorage implements IStorage {
   async updateTask(id: number, task: Partial<InsertTask>): Promise<Task> {
     const existing = await this.getTask(id);
     if (!existing) throw new Error("Task not found");
-    
+
     const updated: Task = {
       ...existing,
       ...task,
+      // Ensure null values for optional fields
+      latitude: task.latitude || existing.latitude || null,
+      longitude: task.longitude || existing.longitude || null,
+      audioUrl: task.audioUrl || existing.audioUrl || null,
     };
     this.tasks.set(id, updated);
     return updated;
