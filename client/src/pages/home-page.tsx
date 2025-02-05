@@ -57,7 +57,10 @@ export default function HomePage() {
 
   const createTaskMutation = useMutation({
     mutationFn: async (data: Partial<InsertTask>) => {
-      const res = await apiRequest("POST", "/api/tasks", data);
+      const res = await apiRequest("POST", "/api/tasks", {
+        ...data,
+        assignedToId: parseInt(data.assignedToId as string)
+      });
       return res.json();
     },
     onSuccess: () => {

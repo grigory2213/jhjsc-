@@ -26,7 +26,7 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/tasks", async (req, res) => {
     if (!req.user) return res.sendStatus(401);
     // If admin, get all tasks; if regular user, get only assigned tasks
-    const tasks = req.user.isAdmin 
+    const tasks = req.user.isAdmin
       ? await storage.getTasks()
       : await storage.getTasksAssignedTo(req.user.id);
     res.json(tasks);
@@ -101,7 +101,11 @@ export function registerRoutes(app: Express): Server {
     if (!req.user) return res.sendStatus(401);
     if (!req.user.isAdmin) return res.sendStatus(403);
     const users = await storage.getUsers();
-    res.json(users);
+    res.json(users.map(user => ({
+      id: user.id,
+      username: user.username,
+      isAdmin: user.isAdmin
+    })));
   });
 
   const httpServer = createServer(app);
