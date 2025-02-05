@@ -1,8 +1,11 @@
-import { User, InsertUser, Task, InsertTask } from "@shared/schema";
+import { users, tasks, type User, type InsertUser, type Task, type InsertTask } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -20,101 +23,76 @@ export interface IStorage {
   sessionStore: session.Store;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private tasks: Map<number, Task>;
+export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
-  private currentUserId: number;
-  private currentTaskId: number;
 
   constructor() {
-    this.users = new Map();
-    this.tasks = new Map();
-    this.currentUserId = 1;
-    this.currentTaskId = 1;
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000, // prune expired entries every 24h
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
     });
   }
 
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async getUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    return await db.select().from(users);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { 
-      ...insertUser, 
-      id,
-      // Make the first user an admin
-      isAdmin: insertUser.isAdmin || this.users.size === 0 
-    };
-    this.users.set(id, user);
+    const [user] = await db.insert(users).values({
+      ...insertUser,
+      // Сделаем первого пользователя админом
+      isAdmin: insertUser.isAdmin || (await this.getUsers()).length === 0,
+    }).returning();
     return user;
   }
 
   async getTasks(userId?: number): Promise<Task[]> {
-    const tasks = Array.from(this.tasks.values());
-    return userId ? tasks.filter(task => task.userId === userId) : tasks;
+    if (userId) {
+      return await db.select().from(tasks).where(eq(tasks.userId, userId));
+    }
+    return await db.select().from(tasks);
   }
 
   async getTasksAssignedTo(userId: number): Promise<Task[]> {
-    return Array.from(this.tasks.values()).filter(
-      (task) => task.assignedToId === userId,
-    );
+    return await db.select().from(tasks).where(eq(tasks.assignedToId, userId));
   }
 
   async getTask(id: number): Promise<Task | undefined> {
-    return this.tasks.get(id);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task;
   }
 
-  async createTask(
-    userId: number,
-    task: Omit<InsertTask, "userId">,
-  ): Promise<Task> {
-    const id = this.currentTaskId++;
-    const newTask: Task = {
+  async createTask(userId: number, task: Omit<InsertTask, "userId">): Promise<Task> {
+    const [newTask] = await db.insert(tasks).values({
       ...task,
-      id,
       userId,
       assignedToId: task.assignedToId,
-      latitude: task.latitude || null,
-      longitude: task.longitude || null,
-      audioUrl: task.audioUrl || null,
-    };
-    this.tasks.set(id, newTask);
+    }).returning();
     return newTask;
   }
 
   async updateTask(id: number, task: Partial<InsertTask>): Promise<Task> {
-    const existing = await this.getTask(id);
-    if (!existing) throw new Error("Task not found");
-
-    const updated: Task = {
-      ...existing,
-      ...task,
-      latitude: task.latitude || existing.latitude || null,
-      longitude: task.longitude || existing.longitude || null,
-      audioUrl: task.audioUrl || existing.audioUrl || null,
-      assignedToId: task.assignedToId || existing.assignedToId,
-    };
-    this.tasks.set(id, updated);
-    return updated;
+    const [updatedTask] = await db
+      .update(tasks)
+      .set(task)
+      .where(eq(tasks.id, id))
+      .returning();
+    return updatedTask;
   }
 
   async deleteTask(id: number): Promise<void> {
-    this.tasks.delete(id);
+    await db.delete(tasks).where(eq(tasks.id, id));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
